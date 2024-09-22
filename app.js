@@ -145,7 +145,7 @@ app.post('/upload-image', upload.single('file'), async (req, res) => {
 
       // Mendapatkan deskripsi dari gambar
       const texte = result.response.text(); 
-      imageDescription = texte.replace(/[\*\#\@\$\%]/g, ''); // Membersihkan karakter khusus dari teks
+      imageDescription = cleanText(texte); // Membersihkan karakter khusus dari teks
 
       console.log(imageDescription);
 
