@@ -10,13 +10,15 @@ const util = require('util');
 
 
 const app = express();
-const port = 3000;
+const port = 2024;
 
 // Middleware
 const cors = require('cors');
 
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // Define the whitelist for CORS
-const whitelist = ['chrome-extension://eipdnjedkpcnlmmdfdkgfpljanehloah', 'https://eunice.eu.org'];
+const whitelist = ['undefined','chrome-extension://eipdnjedkpcnlmmdfdkgfpljanehloah', 'https://eunice.eu.org'];
 const corsOptions = {
   origin: function (origin, callback) {
     // Log the origin of the request
@@ -38,7 +40,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.urlencoded({ extended: true })); 
 
 // Path to the file that stores processed links
 const processedFilesFile = path.join(__dirname, 'processedLinks.json');
@@ -133,8 +135,7 @@ app.post('/upload-image', upload.single('file'), async (req, res) => {
 
       // Gunakan Google Generative AI untuk mendeskripsikan gambar
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-      const result = await model.generateContent([ 
-        "Halo, saya adalah seorang tunanetra yang membutuhkan bantuan untuk memahami materi kuliah...",
+      const result = await model.generateContent(["Halo, saya seorang disabilitas tuna netra yang membutuhkan bantuan memahami materi kuliah. Saya memiliki tangkapan layar dari materi tersebut. Dapatkah Anda membantu menjelaskan teks dalam gambar, termasuk judul, subjudul, poin penting, dan kesimpulan? Jika ada gambar, bagan, atau diagram, mohon berikan deskripsi yang jelas dan mendetail tentang apa yang ditampilkan, termasuk elemen-elemen di dalamnya, hubungan antar elemen, serta informasi penting lainnya yang perlu saya ketahui. Jika istilah atau konsepnya sulit, mohon sertakan penjelasan singkat untuk membantu saya memahami. Terakhir, tolong ringkas poin-poin utama dan ide penting dari materi berdasarkan gambar atau diagram yang sudah dijelaskan.",
         {
           inlineData: {
             data: imageBase64,
@@ -157,19 +158,22 @@ app.post('/upload-image', upload.single('file'), async (req, res) => {
       return res.status(500).json({ message: 'Terjadi kesalahan saat memproses gambar' });
     }
 
-    // [NEW FEATURE] - Convert the cleaned text (imageDescription) to MP3 using textToMp3
-    let mp3FilePath = '';
-    try {
-      if (globalSourceId) {
-        mp3FilePath = await textToMp3(imageDescription); // Convert text to MP3 using globalSourceId (nama file gambar)
-        console.log(`MP3 file generated at: ${mp3FilePath}`);
-      } else {
-        console.error('sourceId is not available for TTS conversion');
-      }
-    } catch (error) {
-      console.error('Error during text-to-speech conversion:', error);
-      return res.status(500).json({ message: 'Terjadi kesalahan saat mengkonversi teks menjadi MP3' });
-    }
+// [NEW FEATURE] - Convert the cleaned text (imageDescription) to MP3 using textToMp3
+let mp3FilePath = '';
+try {
+  if (globalSourceId) {
+    const mp3FileName = `${globalSourceId}.mp3`; // Menentukan nama file MP3 berdasarkan globalSourceId
+    const mp3FilePathFull = await textToMp3(imageDescription); // Path lengkap hasil TTS (text to MP3)
+    mp3FilePath = `/uploads/${mp3FileName}`; // Menyimpan path MP3 dalam format yang diinginkan
+    console.log(`MP3 file generated at: ${mp3FilePathFull}`);
+  } else {
+    console.error('sourceId is not available for TTS conversion');
+  }
+} catch (error) {
+  console.error('Error during text-to-speech conversion:', error);
+  return res.status(500).json({ message: 'Terjadi kesalahan saat mengkonversi teks menjadi MP3' });
+}
+
 
     // Save the processed image data
     const newEntry = {
@@ -242,7 +246,7 @@ async function uploadToChatPDF(filePath) {
       messages: [
         {
           role: 'user',
-          content: 'tolong ringkas dengan panjang dan teliti',
+          content: 'Halo, saya seorang tunanetra yang membutuhkan bantuan untuk memahami file ini. Dapatkah Anda membantu menjelaskan teks pada file ini, termasuk judul, subjudul, poin penting, dan kesimpulan? Jika terdapat gambar, bagan, atau diagram, mohon berikan deskripsi yang jelas dan mendetail tentang apa yang digambarkan, termasuk elemen-elemen yang ada, hubungan antar elemen, serta informasi penting lainnya yang perlu saya ketahui. Jika ada istilah atau konsep yang sulit, mohon sertakan penjelasan singkat untuk membantu saya memahami. Terakhir, tolong ringkas poin-poin utama dan ide penting dari materi berdasarkan gambar atau diagram yang sudah dijelaskan.',
         },
       ],
     };
@@ -301,7 +305,18 @@ async function textToMp3(text) {
 
 // Function to sanitize text by removing special characters
 function cleanText(text) {
-  return text.replace(/[\*\#\@\$\%]/g, '').replace(/\n/g, '\n,').replace(/\//g, ' atau ');// Replace special characters
+  // Remove special characters
+  let cleanedText = text.replace(/[\*\#\@\$\%]/g, '')
+                        .replace(/\n/g, ',')
+                        .replace(/\//g, ' atau ')
+                        .replace(/\n,\n,/g, ',\n');
+
+  // Remove "Tentu," at the beginning of the sentence
+  if (cleanedText.startsWith("Tentu,")) {
+    cleanedText = cleanedText.replace(/^Tentu,/, '').trim();
+  }
+
+  return cleanedText;
 }
 
 // Function to download PDF from Google Drive
@@ -410,7 +425,12 @@ app.post('/submit-pdf-link', async (req, res) => {
     const cleanedText = cleanText(chatPdfResponse.summary.content);
 
     // Generate an MP3 file from the cleaned text summary
-    const mp3FilePath = await textToMp3(cleanedText);
+    //const mp3FilePath = await textToMp3(cleanedText);
+
+    const mp3FileName = `${globalSourceId}.mp3`; // Menentukan nama file MP3 berdasarkan globalSourceId
+    const mp3FilePathFull = await textToMp3(cleanedText); // Path lengkap hasil TTS (text to MP3)
+    mp3FilePath = `/uploads/${mp3FileName}`; // Menyimpan path MP3 dalam format yang diinginkan
+    console.log(`MP3 file generated at: ${mp3FilePathFull}`);
 
     // Create an object to store all the processed data
     const processedData = {
