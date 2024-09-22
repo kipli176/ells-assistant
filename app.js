@@ -458,7 +458,9 @@ app.post('/submit-pdf-link', async (req, res) => {
   }
 });
 
-
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'panduan.html'));
+});
 
 // Start the server
 app.listen(port, () => {
